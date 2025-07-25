@@ -6,47 +6,52 @@
         @dragover.prevent="dragActive = true"
         @dragleave.prevent="dragActive = false"
         @drop.prevent="handleDrop"
+        @click="!cameraActive && triggerFileSelect()"
+        style="user-select: none;"
       >
+        <!-- Close button at top right when camera is active -->
+        <q-btn
+          v-if="cameraActive"
+          icon="close"
+          round
+          unelevated
+          color="grey-8"
+          class="receipt-camera-close-btn"
+          @click.stop="closeCamera"
+          aria-label="Close camera"
+        />
         <div v-if="cameraActive" class="receipt-camera-feed">
           <video
             ref="cameraVideo"
             autoplay
             playsinline
-            style="width: 100%; max-height: 260px; border-radius: 16px; background: #000;"
+            class="receipt-camera-video"
           ></video>
         </div>
         <div v-else class="receipt-drop-content">
           <div class="receipt-drop-icons">
             <q-icon name="photo_camera" color="primary" size="40px" class="receipt-drop-icon" />
-            <q-icon name="videocam" color="accent" size="40px" class="receipt-drop-icon" />
             <q-icon name="description" color="purple" size="40px" class="receipt-drop-icon" />
+            <q-icon name="picture_as_pdf" color="red" size="40px" class="receipt-drop-icon" />
           </div>
-          <div class="receipt-drop-title">Drop your receipt here</div>
-          <div class="receipt-drop-desc">Photos, videos, or livestreams in any language</div>
+          <div class="receipt-drop-title">Add your receipts</div>
+          <div class="receipt-drop-desc">
+            Click to select images or PDFs, <br /> or drag files here
+          </div>
         </div>
         <input
           ref="fileInput"
           type="file"
           multiple
-          accept="image/*,video/*"
+          accept="image/*,application/pdf"
           class="hidden"
           @change="onFilesSelected"
         />
       </div>
-      <div v-if="cameraActive" class="receipt-camera-actions-outside">
+      <!-- Video controls (if enabled) -->
+      <div v-if="cameraActive && cameraMode === 'video' && showVideo" class="receipt-camera-actions-outside">
         <q-btn
-          v-if="cameraMode === 'image'"
-          color="primary"
-          icon="photo_camera"
-          label="Capture"
-          @click="capturePhoto"
-          class="receipt-camera-btn"
-          rounded
-          unelevated
-          size="lg"
-        />
-        <q-btn
-          v-if="cameraMode === 'video' && !recording"
+          v-show="!recording"
           color="primary"
           icon="fiber_manual_record"
           label="Record"
@@ -57,7 +62,7 @@
           size="lg"
         />
         <q-btn
-          v-if="cameraMode === 'video' && recording"
+          v-show="recording"
           color="negative"
           icon="stop"
           label="Stop"
@@ -67,30 +72,55 @@
           unelevated
           size="lg"
         />
-        <q-btn
-          flat
-          icon="close"
-          color="grey"
-          @click="closeCamera"
-          class="receipt-camera-btn"
-          rounded
-          unelevated
-          size="lg"
-        />
       </div>
       <div class="receipt-action-row">
-        <q-btn flat class="receipt-action-btn" @click="openCamera('image')">
+        <!-- Photo button (when camera is closed) -->
+        <q-btn
+          flat
+          class="receipt-action-btn"
+          v-if="!cameraActive"
+          @click="openCamera('image')"
+        >
           <q-icon name="photo_camera" class="q-mr-sm" /> Photo
+          <span v-if="totalPhotoCount > 0" style="margin-left: 6px; display: inline-flex; align-items: center;">
+            <q-icon name="photo" size="16px" color="primary" style="margin-right: 2px;" />
+            <span style="font-size: 0.82em; color: #10b981; font-weight: 600;">{{ totalPhotoCount }}</span>
+          </span>
+          <span v-if="pdfCount > 0" style="margin-left: 8px; display: inline-flex; align-items: center;">
+            <q-icon name="picture_as_pdf" size="16px" color="red" style="margin-right: 2px;" />
+            <span style="font-size: 0.82em; color: #e11d48; font-weight: 600;">{{ pdfCount }}</span>
+          </span>
         </q-btn>
-        <q-btn flat class="receipt-action-btn" @click="openCamera('video')">
-          <q-icon name="videocam" class="q-mr-sm" /> Video
+        <!-- Capture button (when camera is open) -->
+        <q-btn
+          flat
+          class="receipt-action-btn"
+          v-else-if="cameraActive && cameraMode === 'image'"
+          color="primary"
+          icon="photo_camera"
+          @click="capturePhoto"
+        >
+          Capture
+          <span
+            v-if="sessionPhotoCount > 0"
+            style="font-size: 0.82em; color: #10b981; margin-left: 6px; font-weight: 600;"
+          >
+            ({{ sessionPhotoCount }})
+          </span>
         </q-btn>
-        <q-btn flat class="receipt-action-btn" @click="triggerFileSelect">
+        <!-- File button -->
+        <!-- <q-btn flat class="receipt-action-btn" @click="triggerFileSelect">
           <q-icon name="description" class="q-mr-sm" /> File
-        </q-btn>
+          <span
+            v-if="pdfCount > 0"
+            style="font-size: 0.82em; color: #e11d48; margin-left: 6px; font-weight: 600;"
+          >
+            ({{ pdfCount }})
+          </span>
+        </q-btn> -->
       </div>
       <div v-if="files.length" class="receipt-preview-row">
-        <div v-for="(file, idx) in files" :key="file.id" class="receipt-preview-item">
+        <div v-for="(item, idx) in files" :key="item.id" class="receipt-preview-item">
           <q-btn
             dense
             flat
@@ -104,20 +134,45 @@
             style="position: absolute; top: 2px; right: 2px; z-index: 2;"
           />
           <q-img
-            v-if="file.type && file.type.startsWith('image/')"
-            :src="file.preview"
-            :alt="file.name"
-            style="max-width: 80px; max-height: 80px;"
+            v-if="item.type && item.type.startsWith('image/')"
+            :src="item.preview"
+            :alt="item.name"
+            class="receipt-preview-thumb"
           />
+          
+          <div v-else-if="item.type === 'application/pdf'" class="receipt-preview-pdf">
+            <q-icon name="picture_as_pdf" color="red" size="48px" />
+            <div class="receipt-preview-name">{{ crispName(item.name) }}</div>
+          </div>
+          
           <video
-            v-else-if="file.type && file.type.startsWith('video/')"
-            :src="file.preview"
+            v-else-if="showVideo && item.type && item.type.startsWith('video/')"
+            :src="item.preview"
             controls
             style="max-width: 100px; max-height: 80px;"
           />
-          <div class="receipt-preview-name">{{ file.name }}</div>
+          <div v-else class="receipt-preview-name">{{ crispName(item.name) }}</div>
+            <!-- <pre>{{ files }}</pre> -->
         </div>
       </div>
+      <!-- Show thumbnails and counter only while camera is open and in photo mode -->
+      <!-- <div
+        v-if="cameraActive && cameraMode === 'image' && capturedPhotos.length"
+        class="receipt-captured-thumbnails"
+      >
+        <div class="receipt-captured-counter">
+          {{ capturedPhotos.length }} photo{{ capturedPhotos.length > 1 ? 's' : '' }} captured
+        </div>
+        <div class="receipt-captured-thumbs">
+          <img
+            v-for="(photo, idx) in capturedPhotos"
+            :key="photo.id"
+            :src="photo.preview"
+            class="receipt-captured-thumb"
+            :alt="`Captured photo ${idx + 1}`"
+          />
+        </div>
+      </div> -->
       <q-btn
         class="receipt-upload-btn"
         :loading="loading"
@@ -135,7 +190,9 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, computed } from 'vue';
+
+const showVideo = false;
 
 const files = ref([]);
 const loading = ref(false);
@@ -153,6 +210,30 @@ const recording = ref(false);
 let mediaRecorder = null;
 let recordedChunks = [];
 
+// Captured photos state (for current camera session)
+const capturedPhotos = ref([]);
+
+// Counter for images (photos) in files
+const totalPhotoCount = computed(() =>
+  files.value.filter(item => item.type && item.type.startsWith('image/')).length
+);
+const pdfCount = computed(() =>
+  files.value.filter(item => item.type === 'application/pdf').length
+);
+const otherFileCount = computed(() =>
+  files.value.filter(item => !(item.type && (item.type.startsWith('image/') || item.type === 'application/pdf'))).length
+);
+// Counter for photos in current camera session
+const sessionPhotoCount = computed(() => capturedPhotos.value.length);
+
+function removeFile(idx) {
+  const removed = files.value[idx];
+  files.value.splice(idx, 1);
+  // Remove from capturedPhotos if it was a captured photo
+  const capIdx = capturedPhotos.value.findIndex(f => f.id === removed.id);
+  if (capIdx !== -1) capturedPhotos.value.splice(capIdx, 1);
+}
+
 function triggerFileSelect() {
   fileInput.value.click();
 }
@@ -168,11 +249,14 @@ function handleDrop(e) {
 }
 
 function addFiles(newFiles) {
-  for (const file of newFiles) {
-    file.id = `${file.name}-${file.size}-${Date.now()}`;
-    file.preview = URL.createObjectURL(file);
-  }
-  files.value = [...files.value, ...newFiles];
+  const wrappedFiles = newFiles.map(file => ({
+    file,
+    id: `${file.name}-${file.size}-${Date.now()}`,
+    name: file.name,
+    type: file.type,
+    preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+  }));
+  files.value = [...files.value, ...wrappedFiles];
 }
 
 async function openCamera(mode) {
@@ -182,7 +266,7 @@ async function openCamera(mode) {
   try {
     cameraStream.value = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: mode === 'video'
+      audio: showVideo && mode === 'video'
     });
     cameraVideo.value.srcObject = cameraStream.value;
   } catch (err) {
@@ -200,6 +284,7 @@ function closeCamera() {
   recording.value = false;
   mediaRecorder = null;
   recordedChunks = [];
+  capturedPhotos.value = [];
 }
 
 async function capturePhoto() {
@@ -212,11 +297,16 @@ async function capturePhoto() {
   canvas.toBlob(blob => {
     if (blob) {
       const file = new File([blob], `photo-${Date.now()}.png`, { type: 'image/png' });
-      file.id = `${file.name}-${file.size}-${Date.now()}`;
-      file.preview = URL.createObjectURL(file);
-      files.value.push(file);
+      const wrapped = {
+        file,
+        id: `${file.name}-${file.size}-${Date.now()}`,
+        name: file.name,
+        type: file.type,
+        preview: URL.createObjectURL(file),
+      };
+      files.value.push(wrapped);
+      capturedPhotos.value.push(wrapped);
     }
-    closeCamera();
   }, 'image/png');
 }
 
@@ -245,17 +335,12 @@ function stopRecording() {
   }
 }
 
-function removeFile(idx) {
-  files.value.splice(idx, 1);
-}
-
 async function submitRaseed() {
   loading.value = true;
   success.value = false;
   error.value = '';
   try {
     // ...your upload logic here...
-    // For prototype, just simulate success:
     await new Promise(res => setTimeout(res, 1200));
     success.value = true;
     files.value = [];
@@ -264,6 +349,12 @@ async function submitRaseed() {
   } finally {
     loading.value = false;
   }
+}
+
+function crispName(name, max = 16) {
+  if (name.length <= max) return name;
+  const ext = name.split('.').pop();
+  return name.slice(0, max - ext.length - 5) + '...' + ext;
 }
 </script>
 
@@ -282,18 +373,21 @@ async function submitRaseed() {
 }
 
 .receipt-drop-area {
-  border: 2.5px dashed #e0e7ef;
-  border-radius: 20px;
+  position: relative; /* Needed for absolute close btn */
+  border: 2.5px dashed #22c55e; /* Greenish shade */
+  border-radius: 24px;
   background: linear-gradient(135deg, #f8fafc 60%, #f1f5f9 100%);
-  min-height: 180px;
-  width: 100%;
+  width: 320px;
+  height: 320px;
+  max-width: 90vw;
+  max-height: 90vw;
   margin-bottom: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1px 6px 0 rgba(60,64,67,.04);
+  box-shadow: 0 2px 12px 0 rgba(34,197,94,.06);
 }
 
 .receipt-drop-area:hover,
@@ -374,6 +468,7 @@ async function submitRaseed() {
   box-shadow: 0 1px 4px rgba(60,64,67,.04);
   padding: 8px 4px 4px 4px;
   position: relative;
+  margin-top: 18px; /* Add space for the remove button above */
 }
 
 .receipt-preview-name {
@@ -384,11 +479,32 @@ async function submitRaseed() {
   word-break: break-all;
 }
 
+.receipt-preview-pdf .receipt-preview-name {
+  max-width: 90px;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 0.92rem;
+  color: #374151;
+  margin-top: 6px;
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .receipt-preview-pdf .receipt-preview-name {
+    max-width: 70px;
+    font-size: 0.85rem;
+  }
+}
+
 .receipt-remove-btn {
   position: absolute;
-  top: 2px;
+  top: -16px;   /* Move above the image */
   right: 2px;
   z-index: 2;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(60,64,67,.10);
 }
 
 .receipt-upload-btn {
@@ -411,12 +527,26 @@ async function submitRaseed() {
 }
 .receipt-camera-feed {
   width: 100%;
-  min-height: 280px;
+  height: 100%;
+  min-height: 320px;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 0 0 0;
+}
+
+.receipt-camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+  background: #000;
+  aspect-ratio: 1 / 1;
+  min-width: 320px;
+  min-height: 320px;
+  max-width: 320px;
+  max-height: 320px;
 }
 
 .receipt-camera-actions {
@@ -432,15 +562,138 @@ async function submitRaseed() {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 18px;
-  margin: 18px 0 0 0;
+  gap: 10px;           /* Less gap for minimal look */
+  margin: 8px 0 0 0;   /* Less margin above */
   width: 100%;
+  min-height: 44px;    /* Slightly smaller for minimalism */
 }
 
 .receipt-camera-btn {
-  min-width: 110px;
-  font-size: 1.1rem;
-  font-weight: 600;
+  min-width: 80px;     /* Smaller button width */
+  padding: 0 10px;     /* Less horizontal padding */
+  font-size: 1rem;
+  font-weight: 500;
   letter-spacing: 0.01em;
+  border-radius: 12px;
+}
+
+.receipt-camera-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(60,64,67,.10);
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  opacity: 0.92;
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.receipt-camera-close-btn:hover,
+.receipt-camera-close-btn:focus {
+  background: #f1f5f9;
+  box-shadow: 0 4px 16px rgba(60,64,67,.16);
+  opacity: 1;
+}
+
+.receipt-captured-thumbnails {
+  width: 100%;
+  margin: 8px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.receipt-captured-counter {
+  font-size: 0.98rem;
+  color: #10b981;
+  font-weight: 600;
+  margin-bottom: 4px;
+  margin-left: 2px;
+}
+
+.receipt-captured-thumbs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.receipt-captured-thumb {
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1.5px solid #22c55e;
+  background: #fff;
+}
+
+.receipt-preview-thumb,
+.receipt-preview-item q-img,
+.receipt-preview-item img {
+  width: 80px;
+  height: 80px;
+  min-width: 60px;
+  min-height: 60px;
+  max-width: 100px;
+  max-height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  display: block;
+}
+
+.receipt-preview-pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  min-width: 60px;
+  min-height: 60px;
+  max-width: 100px;
+  max-height: 100px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .receipt-preview-thumb,
+  .receipt-preview-item q-img,
+  .receipt-preview-item img {
+    width: 60px;
+    height: 60px;
+    min-width: 40px;
+    min-height: 40px;
+    max-width: 80px;
+    max-height: 80px;
+  }
+
+  .receipt-preview-pdf {
+    width: 60px;
+    height: 60px;
+    min-width: 40px;
+    min-height: 40px;
+    max-width: 80px;
+    max-height: 80px;
+  }
+}
+
+@media (max-width: 400px) {
+  .receipt-drop-area {
+    width: 90vw;
+    height: 90vw;
+    min-width: 0;
+    min-height: 0;
+  }
 }
 </style>

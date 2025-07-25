@@ -1,3 +1,5 @@
+<!-- node v20.14.0
+nvm use v20 -->
 # Quasar App (raseed-app)
 
 A Quasar Project
