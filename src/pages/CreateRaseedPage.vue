@@ -472,7 +472,7 @@ function crispName(name, max = 16) {
 }
 
 .receipt-preview-name {
-  font-size: 0.92rem;
+  font-size: 0.62rem;
   color: #374151;
   margin-top: 6px;
   text-align: center;
@@ -486,7 +486,7 @@ function crispName(name, max = 16) {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  font-size: 0.92rem;
+  font-size: 0.62rem;
   color: #374151;
   margin-top: 6px;
   cursor: pointer;

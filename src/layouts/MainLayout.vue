@@ -1,140 +1,182 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-header elevated>
+    <!-- Header -->
+    <q-header elevated class="bg-white text-dark">
       <q-toolbar>
-        <q-btn
-          flat
-          dense
-          round
-          icon="menu"
-          aria-label="Menu"
-          @click="toggleLeftDrawer"
-        />
-
-        <q-toolbar-title>
-          Quasar App
-        </q-toolbar-title>
-
-        <div>Quasar v{{ $q.version }}</div>
+        <!-- Logo -->
+        <div class="logo-container">
+          <q-icon name="receipt" color="primary" size="28px" />
+          <span class="text-primary text-h5 logo-text">Raseed</span>
+        </div>
+        
+        <q-space />
+        
+        <!-- Right side - User info -->
+        <div class="header-buttons">
+          <q-btn flat round v-if="userStore.user">
+            <q-avatar size="32px">
+              <img :src="userProfilePicture || 'https://cdn.quasar.dev/img/avatar.png'" />
+            </q-avatar>
+            
+            <q-menu anchor="bottom right" self="top right">
+              <q-list style="min-width: 200px">
+                <q-item>
+                  <q-item-section avatar>
+                    <q-avatar>
+                      <img :src="userProfilePicture || 'https://cdn.quasar.dev/img/avatar.png'" />
+                    </q-avatar>
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>{{ userStore.user.name }}</q-item-label>
+                    <q-item-label caption>{{ userStore.user.email }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                
+                <q-separator />
+                
+                <q-item clickable v-close-popup @click="logout">
+                  <q-item-section avatar>
+                    <q-icon name="logout" />
+                  </q-item-section>
+                  <q-item-section>Logout</q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-btn>
+        </div>
       </q-toolbar>
     </q-header>
 
-    <q-drawer
-      v-model="leftDrawerOpen"
-      show-if-above
-      bordered
-    >
-      <q-list>
-        <q-item-label
-          header
-        >
-          Essential Links
-        </q-item-label>
-
-        <EssentialLink
-          v-for="link in linksList"
-          :key="link.title"
-          v-bind="link"
-        />
-
-        <q-item
-          v-if="!userStore.user"
-          clickable
-          tag="router-link"
-          to="/login"
-        >
-          <q-item-section avatar>
-            <q-icon name="login" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Login</q-item-label>
-            <q-item-label caption>Sign in with Google</q-item-label>
-          </q-item-section>
-        </q-item>
-
-        <q-item
-          v-else
-          clickable
-          @click="logout"
-        >
-          <q-item-section avatar>
-            <q-icon name="logout" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>Logout</q-item-label>
-            <q-item-label caption>{{ userStore.user.name }}</q-item-label>
-          </q-item-section>
-        </q-item>
-      </q-list>
-    </q-drawer>
-
+    <!-- Main Content -->
     <q-page-container>
       <router-view />
     </q-page-container>
+    
+    <!-- Bottom Navigation -->
+    <q-footer bordered class="bg-white text-dark">
+      <q-tabs
+        no-caps
+        active-color="primary"
+        indicator-color="primary"
+        class="bottom-navigation"
+        :model-value="currentRoute"
+        @update:model-value="navigateTo"
+      >
+        <q-tab name="dashboard" icon="home" label="Dashboard">
+          <q-tooltip>Dashboard</q-tooltip>
+        </q-tab>
+        
+        <q-tab name="upload" icon="upload_file" label="Upload">
+          <q-tooltip>Upload Receipts</q-tooltip>
+        </q-tab>
+        
+        <q-tab name="assistant" icon="psychology_alt" label="Assistant">
+          <q-tooltip>AI Assistant</q-tooltip>
+        </q-tab>
+      </q-tabs>
+      
+      <!-- Floating Action Button -->
+      <q-page-sticky position="bottom-right" :offset="[18, 18]">
+        <q-btn
+          fab
+          icon="add"
+          color="secondary"
+          size="md"
+        />
+      </q-page-sticky>
+    </q-footer>
   </q-layout>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import EssentialLink from 'components/EssentialLink.vue'
-import { userStore } from 'src/stores/userStore.js';
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { userStore } from 'src/stores/userStore'
 
-userStore.loadUser();
+const router = useRouter()
+const route = useRoute()
+// Fix for profile picture
+const userProfilePicture = computed(() => {
+  if (!userStore.user) return 'https://cdn.quasar.dev/img/avatar.png'
+  
+  // Check all possible locations of the profile picture
+  return userStore.user.picture || 
+         userStore.user.imageUrl || 
+         userStore.user.image ||
+         userStore.user.profilePicture ||
+         userStore.user.avatar ||
+         (userStore.user.profile && userStore.user.profile.picture) ||
+         'https://cdn.quasar.dev/img/avatar.png'
+})
+// Determine current active tab based on current route
+const currentRoute = computed(() => {
+  if (route.path.includes('assistant')) return 'assistant'
+  if (route.path.includes('upload')) return 'upload'
+  return 'dashboard'
+})
 
-const linksList = [
-  {
-    title: 'Docs',
-    caption: 'quasar.dev',
-    icon: 'school',
-    link: 'https://quasar.dev'
-  },
-  {
-    title: 'Github',
-    caption: 'github.com/quasarframework',
-    icon: 'code',
-    link: 'https://github.com/quasarframework'
-  },
-  {
-    title: 'Discord Chat Channel',
-    caption: 'chat.quasar.dev',
-    icon: 'chat',
-    link: 'https://chat.quasar.dev'
-  },
-  {
-    title: 'Forum',
-    caption: 'forum.quasar.dev',
-    icon: 'record_voice_over',
-    link: 'https://forum.quasar.dev'
-  },
-  {
-    title: 'Twitter',
-    caption: '@quasarframework',
-    icon: 'rss_feed',
-    link: 'https://twitter.quasar.dev'
-  },
-  {
-    title: 'Facebook',
-    caption: '@QuasarFramework',
-    icon: 'public',
-    link: 'https://facebook.quasar.dev'
-  },
-  {
-    title: 'Quasar Awesome',
-    caption: 'Community Quasar projects',
-    icon: 'favorite',
-    link: 'https://awesome.quasar.dev'
+// Navigation handler
+function navigateTo(tabName) {
+  switch (tabName) {
+    case 'dashboard':
+      router.push('/create-raseed')
+      break
+    case 'upload':
+      router.push('/create-raseed')
+      break
+    case 'assistant':
+      router.push('/assistant')
+      break
   }
-]
-
-const leftDrawerOpen = ref(false)
-
-function toggleLeftDrawer () {
-  leftDrawerOpen.value = !leftDrawerOpen.value
 }
 
+// Logout function
 function logout() {
-  userStore.clearUser();
-  // Optionally redirect to login page
-  window.location.href = '/login';
+  userStore.clearUser()
+  router.push('/login')
 }
 </script>
+
+<style lang="scss" scoped>
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-text {
+  font-weight: 600;
+  color: #0F9D58;
+  margin-top: 2px;
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.bottom-navigation {
+  height: 64px;
+  
+  .q-tab {
+    padding: 8px 4px;
+    min-height: 64px;
+    
+    .q-tab__icon {
+      font-size: 24px;
+    }
+    
+    .q-tab__label {
+      font-size: 12px;
+      margin-top: 4px;
+    }
+  }
+}
+
+/* Fix for bottom navigation on mobile */
+@media (max-width: 599px) {
+  .q-page-container {
+    padding-bottom: 70px;
+  }
+}
+</style>

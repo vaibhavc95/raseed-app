@@ -21,4 +21,6 @@ secureAxios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Export both named and default for flexibility
+export { secureAxios };
 export default secureAxios;
