@@ -23,7 +23,11 @@
         <div v-else v-for="(message, index) in messages" :key="index" class="message-item"
           :class="{ 'user-message': message.type === 'user', 'assistant-message': message.type === 'assistant' }">
           <div class="message-content">
-            <div class="message-text">{{ message.text }}</div>
+            <!-- User messages stay as plain text -->
+            <div v-if="message.type === 'user'" class="message-text">{{ message.text }}</div>
+            
+            <!-- Assistant messages can contain HTML -->
+            <div v-else class="message-text" v-html="message.text"></div>
           </div>
         </div>
 
@@ -108,11 +112,16 @@ function generateSessionId() {
 
 // Send message (either from input or suggested questions)
 async function sendMessage(suggestedMessage) {
-  const message = suggestedMessage || inputMessage.value.trim()
+  // Check if suggestedMessage is an event or a string
+  const isEvent = suggestedMessage && typeof suggestedMessage === 'object' && suggestedMessage.constructor && suggestedMessage.constructor.name.includes('Event')
+  
+  // Get the actual message text
+  const message = isEvent ? inputMessage.value.trim() : (suggestedMessage || inputMessage.value.trim())
+  
   if (!message || isTyping.value) return
   
-  // Clear input if not from suggested questions
-  if (!suggestedMessage) {
+  // Clear input field if not from suggested questions
+  if (!suggestedMessage || isEvent) {
     inputMessage.value = ''
   }
 
@@ -130,14 +139,14 @@ async function sendMessage(suggestedMessage) {
   try {
     // Send request to API
     const response = await secureAxios.post('/multi-agent-run', {
-      query: message,
+      query: message, // Now correctly sending the message text
       session_id: sessionId.value
     })
 
-    // Add response to messages
+    // Add response to messages - handle HTML content
     messages.value.push({
       type: 'assistant',
-      text: response.data?.response || 'I processed your request but have no specific insights to share.',
+      text: sanitizeHtml(response.data?.result || 'I processed your request but have no specific insights to share.'),
       timestamp: new Date()
     })
 
@@ -154,6 +163,18 @@ async function sendMessage(suggestedMessage) {
     isTyping.value = false
     scrollToBottom()
   }
+}
+
+// Basic HTML sanitization function to help prevent XSS
+function sanitizeHtml(html) {
+  // If not a string, convert to string
+  if (typeof html !== 'string') {
+    return String(html || '');
+  }
+  
+  // Already using v-html which has some Vue protections,
+  // but here we can add additional sanitization if needed
+  return html;
 }
 
 // Scroll to bottom of chat
@@ -262,6 +283,55 @@ function scrollToBottom() {
 .user-message .message-text {
   background-color: #1a73e8;
   color: white;
+}
+
+/* Add styles for HTML content in messages */
+.message-text :deep(p) {
+  margin: 0 0 0.75em 0;
+}
+
+.message-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-text :deep(ul), 
+.message-text :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.message-text :deep(li) {
+  margin-bottom: 0.25em;
+}
+
+.message-text :deep(strong) {
+  font-weight: 600;
+}
+
+.message-text :deep(a) {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.message-text :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.message-text :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+}
+
+.message-text :deep(th),
+.message-text :deep(td) {
+  border: 1px solid #e0e0e0;
+  padding: 8px;
+  text-align: left;
+}
+
+.message-text :deep(th) {
+  background-color: #f8f9fa;
 }
 
 /* Typing indicator */

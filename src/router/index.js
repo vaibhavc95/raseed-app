@@ -1,16 +1,7 @@
 import { defineRouter } from '#q-app/wrappers'
 import { createRouter, createMemoryHistory, createWebHistory, createWebHashHistory } from 'vue-router'
 import routes from './routes.js'
-import { userStore } from 'src/stores/userStore.js'; // <-- Add this import
-
-/*
- * If not building with SSR mode, you can
- * directly export the Router instantiation;
- *
- * The function below can be async too; either use
- * async/await or return a Promise which resolves
- * with the Router instance.
- */
+import { userStore } from 'src/stores/userStore.js'
 
 export default defineRouter(function (/* { store, ssrContext } */) {
   const createHistory = process.env.SERVER
@@ -23,16 +14,30 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     history: createHistory(process.env.VUE_ROUTER_BASE)
   })
 
-  // Load user from localStorage BEFORE navigation guard
-  userStore.loadUser();
+  // Load user from localStorage BEFORE navigation guards
+  userStore.loadUser()
 
   Router.beforeEach((to, from, next) => {
+    console.log('Navigation guard - checking route:', to.path)
+    console.log('User logged in:', !!userStore.user)
+    
+    // If route requires auth and user is not logged in
     if (to.meta.requiresAuth && !userStore.user) {
-      next('/login');
-    } else {
-      next();
+      console.log('Redirecting to homepage - authentication required')
+      next('/')
+      return
     }
-  });
+    
+    // If user is logged in and trying to access homepage, redirect to dashboard
+    if (to.path === '/' && userStore.user) {
+      console.log('User already logged in, redirecting to dashboard')
+      next('/create-raseed')
+      return
+    }
+    
+    // Allow navigation
+    next()
+  })
 
   return Router
 })
