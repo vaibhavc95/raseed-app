@@ -597,9 +597,11 @@ function saveReceipt() {
     return;
   }
   
-  // Create a formatted object to match the expected structure
-  const resultData = {
-    identifier: props.receipt.identifier,
+  // Extract the identifier (will be used as query parameter)
+  const identifier = props.receipt.identifier;
+  
+  // Create data object without identifier in the structure
+  const data = {
     extracted: {
       ...formData.value,
       metadata: {
@@ -611,10 +613,17 @@ function saveReceipt() {
   }
   
   // Remove any ID fields we added for the table
-  resultData.extracted.taxes.forEach(tax => delete tax.id)
-  resultData.extracted.metadata.items.forEach(item => delete item.id)
+  // Fix: Access taxes and items through the extracted property
+  if (data.extracted.taxes) {
+    data.extracted.taxes.forEach(tax => delete tax.id);
+  }
   
-  emit('save', resultData)
+  if (data.extracted.metadata && data.extracted.metadata.items) {
+    data.extracted.metadata.items.forEach(item => delete item.id);
+  }
+  
+  // Pass both identifier and data separately to parent component
+  emit('save', { identifier, data })
   emit('update:isOpen', false)
 }
 

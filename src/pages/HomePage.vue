@@ -220,16 +220,16 @@ async function handleDirectGoogleResponse(response) {
       message: 'Authenticating with backend...',
       details: `Welcome ${payload.name}`
     }
-
+      // user_info: {
+      //   google_id: payload.sub,
+      //   email: payload.email,
+      //   name: payload.name,
+      //   picture: payload.picture
+      // }
     // Send credential to backend for authentication
     const loginResponse = await axios.post(`${backendApiUrl}/auth/login`, {
-      token: response.credential,
-      user_info: {
-        google_id: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture
-      }
+      token: response.credential
+
     }, {
       headers: {'Content-Type': 'application/json'},
       withCredentials: true

@@ -229,6 +229,35 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- Wallet Dialog -->
+    <q-dialog v-model="walletDialogVisible" persistent>
+      <q-card class="wallet-dialog-card">
+        <q-card-section class="row items-center bg-primary text-white">
+          <div class="text-h6">Receipt Saved Successfully!</div>
+          <q-space />
+          <q-btn icon="close" flat round dense @click="closeWalletDialogAndRedirect" />
+        </q-card-section>
+
+        <q-card-section class="q-pt-lg q-px-lg">
+          <div class="text-center">
+            <q-icon name="check_circle" color="positive" size="64px" />
+            <p class="text-h6 q-mt-md">Your receipt has been processed</p>
+            <p class="text-body1 q-mb-lg">Add this receipt to Google Wallet for easy access</p>
+            
+            <!-- Google Wallet Button -->
+            <a href="javascript:void(0)" @click="redirectToGoogleWallet" class="google-wallet-button">
+              <div class="google-wallet-button-content">
+                <img src="https://lh3.googleusercontent.com/8lpANuj1pRxX98RKx1AbAz74EP8jnUirTvlGHFwN9HKY_CyOgon_PC5SH3_kWLh_KQ=w96-rw" 
+                     alt="Google Wallet" 
+                     class="google-wallet-logo" />
+                <span>Add to Google Wallet</span>
+              </div>
+            </a>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -238,6 +267,7 @@ import { v4 as uuidv4 } from 'uuid';
 import secureAxios from 'src/boot/secureAxios';
 import { userStore } from 'src/stores/userStore';
 import ReceiptEditor from 'src/components/ReceiptEditor.vue';
+import { useRouter } from 'vue-router';
 
 // State management
 const files = ref([]);
@@ -261,6 +291,9 @@ const showReceiptEditor = ref(false);
 const showHistory = ref(false);
 const currentIdentifier = ref('');
 const savedReceipts = ref([]);
+
+// Router instance
+const router = useRouter();
 
 // Counter for images (photos) in files
 const totalPhotoCount = computed(() =>
@@ -552,27 +585,37 @@ async function saveReceiptData(editedData) {
   error.value = '';
   
   try {
-    // Send the edited data to the backend
-    await secureAxios.post('/receipts/save', editedData);
+    // Extract identifier and data from the object received from ReceiptEditor
+    const { identifier, data } = editedData;
     
-    // Show success message
-    const successMessage = {
-      title: 'Receipt Saved',
-      message: 'Your receipt has been successfully saved.',
-      details: '',
-      icon: 'check_circle',
-      color: 'positive'
-    };
+    // Use identifier as a query parameter
+    const response = await secureAxios.post(`/receipts/save?identifier=${identifier}`, data);
     
-    errorDialogData.value = successMessage;
-    errorDialogVisible.value = true;
-    
-    // Clear data after confirmation
-    setTimeout(() => {
-      receiptData.value = null;
-      showReceiptEditor.value = false;
-      errorDialogVisible.value = false;
-    }, 1500);
+    // Show Google Wallet dialog if URL is available
+    if (response.data && response.data.add_to_wallet_url) {
+      walletDialogData.value = {
+        receipt_id: response.data.receipt_id,
+        add_to_wallet_url: response.data.add_to_wallet_url
+      };
+      walletDialogVisible.value = true;
+    } else {
+      // If no wallet URL is available, just show success and reset
+      errorDialogData.value = {
+        title: 'Receipt Saved',
+        message: 'Your receipt has been successfully saved.',
+        details: '',
+        icon: 'check_circle',
+        color: 'positive'
+      };
+      errorDialogVisible.value = true;
+      
+      // Reset after a short delay
+      setTimeout(() => {
+        errorDialogVisible.value = false;
+        receiptData.value = null;
+        showReceiptEditor.value = false;
+      }, 1500);
+    }
     
   } catch (err) {
     console.error('Error saving receipt data:', err);
@@ -587,6 +630,42 @@ async function saveReceiptData(editedData) {
   } finally {
     loading.value = false;
   }
+}
+
+// Add these refs for the wallet dialog
+const walletDialogVisible = ref(false);
+const walletDialogData = ref({
+  receipt_id: null,
+  add_to_wallet_url: ''
+});
+
+// Function to redirect to Google Wallet
+function redirectToGoogleWallet() {
+  // Open Google Wallet URL in a new tab
+  window.open(walletDialogData.value.add_to_wallet_url, '_blank');
+  
+  // Close the dialog and reset the page
+  closeWalletDialogAndRedirect();
+}
+
+// Function to close wallet dialog and return to create-raseed page
+function closeWalletDialogAndRedirect() {
+  walletDialogVisible.value = false;
+  receiptData.value = null;
+  showReceiptEditor.value = false;
+  router.push('/create-raseed');
+}
+
+// Simple toast function if you don't already have one
+function showSuccessToast(message) {
+  const { Notify } = require('quasar');
+  Notify.create({
+    message,
+    color: 'positive',
+    icon: 'check_circle',
+    position: 'top',
+    timeout: 2000
+  });
 }
 </script>
 
@@ -880,5 +959,46 @@ async function saveReceiptData(editedData) {
   width: 100%;
   max-width: 400px;
   border-radius: 16px;
+}
+
+.wallet-dialog-card {
+  width: 100%;
+  max-width: 450px;
+  border-radius: 16px;
+}
+
+.google-wallet-button {
+  display: inline-block;
+  background-color: #4285f4;
+  border-radius: 4px;
+  padding: 12px 24px;
+  color: white;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+  cursor: pointer;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 280px;
+  text-align: center;
+}
+
+.google-wallet-button:hover {
+  background: #155ab6;
+  transform: translateY(-1px);
+}
+.google-wallet-button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.google-wallet-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 </style>
