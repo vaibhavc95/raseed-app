@@ -1,202 +1,247 @@
 <template>
   <q-page class="flex flex-center bg-grey-1">
     <div class="receipt-upload-container">
-      <div
-        class="receipt-drop-area"
-        @dragover.prevent="dragActive = true"
-        @dragleave.prevent="dragActive = false"
-        @drop.prevent="handleDrop"
-        @click="!cameraActive && triggerFileSelect()"
-        style="user-select: none;"
-      >
-        <!-- Close button at top right when camera is active -->
-        <q-btn
-          v-if="cameraActive"
-          icon="close"
-          round
-          unelevated
-          color="grey-8"
-          class="receipt-camera-close-btn"
-          @click.stop="closeCamera"
-          aria-label="Close camera"
-        />
-        <div v-if="cameraActive" class="receipt-camera-feed">
-          <video
-            ref="cameraVideo"
-            autoplay
-            playsinline
-            class="receipt-camera-video"
-          ></video>
-        </div>
-        <div v-else class="receipt-drop-content">
-          <div class="receipt-drop-icons">
-            <q-icon name="photo_camera" color="primary" size="40px" class="receipt-drop-icon" />
-            <q-icon name="description" color="purple" size="40px" class="receipt-drop-icon" />
-            <q-icon name="picture_as_pdf" color="red" size="40px" class="receipt-drop-icon" />
-          </div>
-          <div class="receipt-drop-title">Add your receipts</div>
-          <div class="receipt-drop-desc">
-            Click to select images or PDFs, <br /> or drag files here
-          </div>
-        </div>
-        <input
-          ref="fileInput"
-          type="file"
-          multiple
-          accept="image/*,application/pdf"
-          class="hidden"
-          @change="onFilesSelected"
-        />
-      </div>
-      <!-- Video controls (if enabled) -->
-      <div v-if="cameraActive && cameraMode === 'video' && showVideo" class="receipt-camera-actions-outside">
-        <q-btn
-          v-show="!recording"
-          color="primary"
-          icon="fiber_manual_record"
-          label="Record"
-          @click="startRecording"
-          class="receipt-camera-btn"
-          rounded
-          unelevated
-          size="lg"
-        />
-        <q-btn
-          v-show="recording"
-          color="negative"
-          icon="stop"
-          label="Stop"
-          @click="stopRecording"
-          class="receipt-camera-btn"
-          rounded
-          unelevated
-          size="lg"
-        />
-      </div>
-      <div class="receipt-action-row">
-        <!-- Photo button (when camera is closed) -->
-        <q-btn
-          flat
-          class="receipt-action-btn"
-          v-if="!cameraActive"
-          @click="openCamera('image')"
+      <!-- Initial Upload UI -->
+      <div v-if="!receiptData">
+        <div
+          class="receipt-drop-area"
+          :class="{ active: dragActive }"
+          @dragover.prevent="dragActive = true"
+          @dragleave.prevent="dragActive = false"
+          @drop.prevent="handleDrop"
+          @click="!cameraActive && triggerFileSelect()"
+          style="user-select: none"
         >
-          <q-icon name="photo_camera" class="q-mr-sm" /> Photo
-          <span v-if="totalPhotoCount > 0" style="margin-left: 6px; display: inline-flex; align-items: center;">
-            <q-icon name="photo" size="16px" color="primary" style="margin-right: 2px;" />
-            <span style="font-size: 0.82em; color: #10b981; font-weight: 600;">{{ totalPhotoCount }}</span>
-          </span>
-          <span v-if="pdfCount > 0" style="margin-left: 8px; display: inline-flex; align-items: center;">
-            <q-icon name="picture_as_pdf" size="16px" color="red" style="margin-right: 2px;" />
-            <span style="font-size: 0.82em; color: #e11d48; font-weight: 600;">{{ pdfCount }}</span>
-          </span>
-        </q-btn>
-        <!-- Capture button (when camera is open) -->
-        <q-btn
-          flat
-          class="receipt-action-btn"
-          v-else-if="cameraActive && cameraMode === 'image'"
-          color="primary"
-          icon="photo_camera"
-          @click="capturePhoto"
-        >
-          Capture
-          <span
-            v-if="sessionPhotoCount > 0"
-            style="font-size: 0.82em; color: #10b981; margin-left: 6px; font-weight: 600;"
-          >
-            ({{ sessionPhotoCount }})
-          </span>
-        </q-btn>
-        <!-- File button -->
-        <!-- <q-btn flat class="receipt-action-btn" @click="triggerFileSelect">
-          <q-icon name="description" class="q-mr-sm" /> File
-          <span
-            v-if="pdfCount > 0"
-            style="font-size: 0.82em; color: #e11d48; margin-left: 6px; font-weight: 600;"
-          >
-            ({{ pdfCount }})
-          </span>
-        </q-btn> -->
-      </div>
-      <div v-if="files.length" class="receipt-preview-row">
-        <div v-for="(item, idx) in files" :key="item.id" class="receipt-preview-item">
+          <!-- Close button at top right when camera is active -->
           <q-btn
-            dense
-            flat
-            round
+            v-if="cameraActive"
             icon="close"
-            color="negative"
-            size="sm"
-            class="receipt-remove-btn"
-            @click="removeFile(idx)"
-            aria-label="Remove file"
-            style="position: absolute; top: 2px; right: 2px; z-index: 2;"
+            round
+            unelevated
+            color="grey-8"
+            class="receipt-camera-close-btn"
+            @click.stop="closeCamera"
+            aria-label="Close camera"
           />
-          <q-img
-            v-if="item.type && item.type.startsWith('image/')"
-            :src="item.preview"
-            :alt="item.name"
-            class="receipt-preview-thumb"
-          />
-          
-          <div v-else-if="item.type === 'application/pdf'" class="receipt-preview-pdf">
-            <q-icon name="picture_as_pdf" color="red" size="48px" />
-            <div class="receipt-preview-name">{{ crispName(item.name) }}</div>
+          <div v-if="cameraActive" class="receipt-camera-feed">
+            <video
+              ref="cameraVideo"
+              autoplay
+              playsinline
+              class="receipt-camera-video"
+            ></video>
           </div>
-          
-          <video
-            v-else-if="showVideo && item.type && item.type.startsWith('video/')"
-            :src="item.preview"
-            controls
-            style="max-width: 100px; max-height: 80px;"
+          <div v-else class="receipt-drop-content">
+            <div class="receipt-drop-icons">
+              <q-icon
+                name="photo_camera"
+                color="primary"
+                size="40px"
+                class="receipt-drop-icon"
+              />
+              <q-icon
+                name="description"
+                color="purple"
+                size="40px"
+                class="receipt-drop-icon"
+              />
+              <q-icon
+                name="picture_as_pdf"
+                color="red"
+                size="40px"
+                class="receipt-drop-icon"
+              />
+            </div>
+            <div class="receipt-drop-title">Add your receipts</div>
+            <div class="receipt-drop-desc">
+              Click to select images or PDFs, <br />
+              or drag files here
+            </div>
+          </div>
+          <input
+            ref="fileInput"
+            type="file"
+            multiple
+            accept="image/*,application/pdf"
+            class="hidden"
+            @change="onFilesSelected"
           />
-          <div v-else class="receipt-preview-name">{{ crispName(item.name) }}</div>
-            <!-- <pre>{{ files }}</pre> -->
+        </div>
+        <div class="receipt-action-row">
+          <!-- Photo button (when camera is closed) -->
+          <q-btn
+            flat
+            class="receipt-action-btn"
+            v-if="!cameraActive"
+            @click="openCamera('image')"
+          >
+            <q-icon name="photo_camera" class="q-mr-sm" /> Photo
+            <span
+              v-if="totalPhotoCount > 0"
+              style="
+                margin-left: 6px;
+                display: inline-flex;
+                align-items: center;
+              "
+            >
+              <q-icon
+                name="photo"
+                size="16px"
+                color="primary"
+                style="margin-right: 2px"
+              />
+              <span
+                style="font-size: 0.82em; color: #10b981; font-weight: 600"
+                >{{ totalPhotoCount }}</span
+              >
+            </span>
+            <span
+              v-if="pdfCount > 0"
+              style="
+                margin-left: 8px;
+                display: inline-flex;
+                align-items: center;
+              "
+            >
+              <q-icon
+                name="picture_as_pdf"
+                size="16px"
+                color="red"
+                style="margin-right: 2px"
+              />
+              <span
+                style="font-size: 0.82em; color: #e11d48; font-weight: 600"
+                >{{ pdfCount }}</span
+              >
+            </span>
+          </q-btn>
+          <!-- Capture button (when camera is open) -->
+          <q-btn
+            flat
+            class="receipt-action-btn"
+            v-else-if="cameraActive && cameraMode === 'image'"
+            color="primary"
+            icon="photo_camera"
+            @click="capturePhoto"
+          >
+            Capture
+            <span
+              v-if="sessionPhotoCount > 0"
+              style="
+                font-size: 0.82em;
+                color: #10b981;
+                margin-left: 6px;
+                font-weight: 600;
+              "
+            >
+              ({{ sessionPhotoCount }})
+            </span>
+          </q-btn>
+        </div>
+
+        <div v-if="files.length" class="receipt-preview-row">
+          <div
+            v-for="(item, idx) in files"
+            :key="item.id"
+            class="receipt-preview-item"
+          >
+            <q-btn
+              dense
+              flat
+              round
+              icon="close"
+              color="negative"
+              size="sm"
+              class="receipt-remove-btn"
+              @click="removeFile(idx)"
+              aria-label="Remove file"
+              style="position: absolute; top: 2px; right: 2px; z-index: 2"
+            />
+            <q-img
+              v-if="item.type && item.type.startsWith('image/')"
+              :src="item.preview"
+              :alt="item.name"
+              class="receipt-preview-thumb"
+            />
+
+            <div
+              v-else-if="item.type === 'application/pdf'"
+              class="receipt-preview-pdf"
+            >
+              <q-icon name="picture_as_pdf" color="red" size="48px" />
+              <div class="receipt-preview-name">{{ crispName(item.name) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <q-btn
+          class="receipt-upload-btn"
+          :loading="loading"
+          :disable="files.length === 0"
+          @click="submitRaseed"
+        >
+          Upload & Analyze
+        </q-btn>
+
+        <div v-if="error" class="text-negative text-center q-mt-md">
+          {{ error }}
         </div>
       </div>
-      <!-- Show thumbnails and counter only while camera is open and in photo mode -->
-      <!-- <div
-        v-if="cameraActive && cameraMode === 'image' && capturedPhotos.length"
-        class="receipt-captured-thumbnails"
-      >
-        <div class="receipt-captured-counter">
-          {{ capturedPhotos.length }} photo{{ capturedPhotos.length > 1 ? 's' : '' }} captured
-        </div>
-        <div class="receipt-captured-thumbs">
-          <img
-            v-for="(photo, idx) in capturedPhotos"
-            :key="photo.id"
-            :src="photo.preview"
-            class="receipt-captured-thumb"
-            :alt="`Captured photo ${idx + 1}`"
-          />
-        </div>
-      </div> -->
-      <q-btn
-        class="receipt-upload-btn"
-        :loading="loading"
-        :disable="files.length === 0"
-        @click="submitRaseed"
-      >
-        Upload & Analyze
-      </q-btn>
-      <div v-if="success" class="text-positive text-center q-mt-md">
-        Raseed created successfully!
+
+      <!-- Receipt History UI (if wanted) -->
+      <div v-else-if="showHistory" class="receipt-history-section">
+        <!-- Receipt history UI here -->
       </div>
-      <div v-if="error" class="text-negative text-center q-mt-md">{{ error }}</div>
     </div>
+
+    <!-- Receipt Editor Modal -->
+    <receipt-editor
+      :receipt="receiptData"
+      :is-open="showReceiptEditor"
+      @update:is-open="showReceiptEditor = $event"
+      @save="saveReceiptData"
+      @cancel="cancelEdit"
+    />
+
+    <!-- Error Dialog -->
+    <q-dialog v-model="errorDialogVisible">
+      <q-card class="error-dialog-card">
+        <q-card-section class="row items-center">
+          <div class="column items-center col-auto q-mr-md">
+            <q-icon
+              :name="errorDialogData.icon || 'error'"
+              :color="errorDialogData.color || 'negative'"
+              size="48px"
+            />
+          </div>
+          <div class="col text-h6">{{ errorDialogData.title }}</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+
+        <q-card-section>
+          <p class="text-body1 q-mb-sm">{{ errorDialogData.message }}</p>
+          <p class="text-caption text-grey-8">{{ errorDialogData.details }}</p>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="Try Again" color="primary" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
-import { ref, nextTick, computed } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { v4 as uuidv4 } from 'uuid';
+import secureAxios from 'src/boot/secureAxios';
+import { userStore } from 'src/stores/userStore';
+import ReceiptEditor from 'src/components/ReceiptEditor.vue';
 
-const showVideo = false;
-
+// State management
 const files = ref([]);
 const loading = ref(false);
-const success = ref(false);
 const error = ref('');
 const dragActive = ref(false);
 const fileInput = ref(null);
@@ -206,12 +251,16 @@ const cameraActive = ref(false);
 const cameraMode = ref('image');
 const cameraStream = ref(null);
 const cameraVideo = ref(null);
-const recording = ref(false);
-let mediaRecorder = null;
-let recordedChunks = [];
 
 // Captured photos state (for current camera session)
 const capturedPhotos = ref([]);
+
+// Receipt data and UI state
+const receiptData = ref(null);
+const showReceiptEditor = ref(false);
+const showHistory = ref(false);
+const currentIdentifier = ref('');
+const savedReceipts = ref([]);
 
 // Counter for images (photos) in files
 const totalPhotoCount = computed(() =>
@@ -220,19 +269,69 @@ const totalPhotoCount = computed(() =>
 const pdfCount = computed(() =>
   files.value.filter(item => item.type === 'application/pdf').length
 );
-const otherFileCount = computed(() =>
-  files.value.filter(item => !(item.type && (item.type.startsWith('image/') || item.type === 'application/pdf'))).length
-);
 // Counter for photos in current camera session
 const sessionPhotoCount = computed(() => capturedPhotos.value.length);
 
+// Load saved identifiers on component mount
+onMounted(() => {
+  loadSavedIdentifiers();
+});
+
+// Load any saved receipt identifiers from localStorage
+function loadSavedIdentifiers() {
+  try {
+    const savedIds = localStorage.getItem('raseed_receipt_ids');
+    if (savedIds) {
+      const parsedIds = JSON.parse(savedIds);
+      if (Array.isArray(parsedIds)) {
+        savedReceipts.value = parsedIds;
+      }
+    }
+  } catch (err) {
+    console.error('Error loading saved receipt IDs', err);
+  }
+}
+
+// Save a new receipt identifier to localStorage
+function saveIdentifierToStorage(identifier) {
+  try {
+    const currentIds = [...savedReceipts.value];
+    if (!currentIds.includes(identifier)) {
+      currentIds.push(identifier);
+      savedReceipts.value = currentIds;
+      localStorage.setItem('raseed_receipt_ids', JSON.stringify(currentIds));
+    }
+  } catch (err) {
+    console.error('Error saving receipt ID', err);
+  }
+}
+
 function removeFile(idx) {
   const removed = files.value[idx];
+  // Release the URL object to prevent memory leaks
+  if (removed.preview) {
+    URL.revokeObjectURL(removed.preview);
+  }  
   files.value.splice(idx, 1);
   // Remove from capturedPhotos if it was a captured photo
   const capIdx = capturedPhotos.value.findIndex(f => f.id === removed.id);
   if (capIdx !== -1) capturedPhotos.value.splice(capIdx, 1);
 }
+// Also add cleanup on component unmount
+onBeforeUnmount(() => {
+  // Clean up all file previews
+  files.value.forEach(file => {
+    if (file.preview) {
+      URL.revokeObjectURL(file.preview);
+    }
+  });
+  
+  // Clean up camera if it's still active
+  if (cameraStream.value) {
+    cameraStream.value.getTracks().forEach(track => track.stop());
+    cameraStream.value = null;
+  }
+});
 
 function triggerFileSelect() {
   fileInput.value.click();
@@ -266,7 +365,7 @@ async function openCamera(mode) {
   try {
     cameraStream.value = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: showVideo && mode === 'video'
+      audio: false
     });
     cameraVideo.value.srcObject = cameraStream.value;
   } catch (err) {
@@ -281,9 +380,6 @@ function closeCamera() {
     cameraStream.value = null;
   }
   cameraActive.value = false;
-  recording.value = false;
-  mediaRecorder = null;
-  recordedChunks = [];
   capturedPhotos.value = [];
 }
 
@@ -310,51 +406,187 @@ async function capturePhoto() {
   }, 'image/png');
 }
 
-function startRecording() {
-  recordedChunks = [];
-  mediaRecorder = new MediaRecorder(cameraStream.value, { mimeType: 'video/webm' });
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) recordedChunks.push(e.data);
-  };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const file = new File([blob], `video-${Date.now()}.webm`, { type: 'video/webm' });
-    file.id = `${file.name}-${file.size}-${Date.now()}`;
-    file.preview = URL.createObjectURL(file);
-    files.value.push(file);
-    closeCamera();
-  };
-  mediaRecorder.start();
-  recording.value = true;
-}
-
-function stopRecording() {
-  if (mediaRecorder && recording.value) {
-    mediaRecorder.stop();
-    recording.value = false;
-  }
-}
-
 async function submitRaseed() {
+  if (files.value.length === 0) {
+    error.value = 'Please select at least one file to upload';
+    return;
+  }
+
   loading.value = true;
-  success.value = false;
   error.value = '';
+  
   try {
-    // ...your upload logic here...
-    await new Promise(res => setTimeout(res, 1200));
-    success.value = true;
+    // Create form data for API request
+    const formData = new FormData();
+    
+    // Generate a unique identifier using user ID and timestamp
+    const userId = userStore.user?.sub || userStore.user?.google_id || 'unknown-user';
+    const timestamp = Date.now();
+    const identifier = `${userId}-${timestamp}`;
+    
+    // Add the identifier to the form data
+    formData.append('identifier', identifier);
+    
+    // Add all files to the form data
+    files.value.forEach((fileObj, index) => {
+      formData.append(`files`, fileObj.file);
+    });
+    
+    // Send the request to the backend
+    const response = await secureAxios.post('/receipts/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    console.log('Receipt upload response:', response.data);
+    
+    // Check if the response contains an error field
+    if (response.data.error) {
+      throw { 
+        response: { 
+          data: { error: response.data.error } 
+        } 
+      };
+    }
+    
+    // Store the response data and identifier
+    receiptData.value = response.data;
+    currentIdentifier.value = identifier;
+    saveIdentifierToStorage(identifier);
+    
+    // Show the receipt editor
+    showReceiptEditor.value = true;
+    
+    // Clear files after successful upload
     files.value = [];
+    
   } catch (err) {
-    error.value = err.message || 'Failed to upload receipts';
+    console.error('Error uploading receipts:', err);
+    
+    // Handle specific error types gracefully
+    if (err.response?.data?.error) {
+      const errorMsg = err.response.data.error;
+      
+      // Check for Gemini quota exceeded error
+      if (errorMsg.includes('RESOURCE_EXHAUSTED') && errorMsg.includes('exceeded your current quota')) {
+        // Show user-friendly quota error message
+        showErrorDialog({
+          title: 'AI Service Limit Reached',
+          message: 'Our AI service has reached its processing limit. Please try again later.',
+          details: 'The Google Gemini API has a daily limit on free tier usage. You can try again tomorrow.',
+          icon: 'schedule',
+          color: 'amber-8'
+        });
+        return;
+      }
+      
+      // Check for other OCR errors
+      if (errorMsg.includes('Failed to perform OCR')) {
+        showErrorDialog({
+          title: 'Receipt Processing Issue',
+          message: 'We had trouble reading your receipt. Please try with a clearer image.',
+          details: 'Make sure the receipt is well-lit and text is clearly visible.',
+          icon: 'image_not_supported',
+          color: 'deep-orange'
+        });
+        return;
+      }
+      
+      // Generic error with the actual message
+      error.value = 'Upload failed: ' + getSimplifiedErrorMessage(errorMsg);
+    } else {
+      // Default error message
+      error.value = 'Failed to upload receipts. Please try again.';
+    }
   } finally {
     loading.value = false;
   }
 }
 
-function crispName(name, max = 16) {
-  if (name.length <= max) return name;
-  const ext = name.split('.').pop();
-  return name.slice(0, max - ext.length - 5) + '...' + ext;
+// Helper function to simplify complex error messages
+function getSimplifiedErrorMessage(errorMsg) {
+  // If it's a string representation of JSON, try to extract useful parts
+  if (typeof errorMsg === 'string' && (errorMsg.includes('{') || errorMsg.includes('}'))) {
+    try {
+      // Try to find a user-friendly message in the error structure
+      if (errorMsg.includes('message')) {
+        const match = errorMsg.match(/'message':\s*'([^']+)'/);
+        if (match && match[1]) {
+          return match[1].split('.')[0]; // Just the first sentence
+        }
+      }
+      
+      // Fall back to a simplified version
+      return 'Processing error. Please try again later.';
+    } catch (e) {
+      // If parsing fails, return a shortened version
+      return errorMsg.substring(0, 100) + (errorMsg.length > 100 ? '...' : '');
+    }
+  }
+  
+  return errorMsg;
+}
+
+// Add this function and ref for the error dialog
+const errorDialogVisible = ref(false);
+const errorDialogData = ref({
+  title: '',
+  message: '',
+  details: '',
+  icon: '',
+  color: ''
+});
+
+function showErrorDialog(data) {
+  errorDialogData.value = data;
+  errorDialogVisible.value = true;
+}
+function cancelEdit() {
+  // Reset data and close editor
+  receiptData.value = null;
+  showReceiptEditor.value = false;
+}
+async function saveReceiptData(editedData) {
+  loading.value = true;
+  error.value = '';
+  
+  try {
+    // Send the edited data to the backend
+    await secureAxios.post('/receipts/save', editedData);
+    
+    // Show success message
+    const successMessage = {
+      title: 'Receipt Saved',
+      message: 'Your receipt has been successfully saved.',
+      details: '',
+      icon: 'check_circle',
+      color: 'positive'
+    };
+    
+    errorDialogData.value = successMessage;
+    errorDialogVisible.value = true;
+    
+    // Clear data after confirmation
+    setTimeout(() => {
+      receiptData.value = null;
+      showReceiptEditor.value = false;
+      errorDialogVisible.value = false;
+    }, 1500);
+    
+  } catch (err) {
+    console.error('Error saving receipt data:', err);
+    
+    showErrorDialog({
+      title: 'Save Failed',
+      message: 'We couldn\'t save your receipt data.',
+      details: err.response?.data?.message || err.message || 'Please try again.',
+      icon: 'error',
+      color: 'negative'
+    });
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
@@ -362,7 +594,8 @@ function crispName(name, max = 16) {
 .receipt-upload-container {
   background: #fff;
   border-radius: 24px;
-  box-shadow: 0 2px 16px 0 rgba(60,64,67,.10), 0 1.5px 4px rgba(60,64,67,.06);
+  box-shadow: 0 2px 16px 0 rgba(60, 64, 67, 0.1),
+    0 1.5px 4px rgba(60, 64, 67, 0.06);
   padding: 40px 32px 32px 32px;
   width: 100%;
   max-width: 700px;
@@ -387,14 +620,14 @@ function crispName(name, max = 16) {
   justify-content: center;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 12px 0 rgba(34,197,94,.06);
+  box-shadow: 0 2px 12px 0 rgba(34, 197, 94, 0.06);
 }
 
 .receipt-drop-area:hover,
 .receipt-drop-area:focus,
 .receipt-drop-area.active {
   border-color: #60a5fa;
-  box-shadow: 0 4px 16px 0 rgba(60,64,67,.10);
+  box-shadow: 0 4px 16px 0 rgba(60, 64, 67, 0.1);
 }
 
 .receipt-drop-content {
@@ -438,7 +671,7 @@ function crispName(name, max = 16) {
   font-weight: 500;
   background: #f4f8fb;
   transition: background 0.18s, border-color 0.18s, transform 0.18s;
-  box-shadow: 0 1px 4px rgba(60,64,67,.04);
+  box-shadow: 0 1px 4px rgba(60, 64, 67, 0.04);
   padding: 12px 0;
   color: #222;
 }
@@ -465,7 +698,7 @@ function crispName(name, max = 16) {
   max-width: 100px;
   background: #f8fafc;
   border-radius: 14px;
-  box-shadow: 0 1px 4px rgba(60,64,67,.04);
+  box-shadow: 0 1px 4px rgba(60, 64, 67, 0.04);
   padding: 8px 4px 4px 4px;
   position: relative;
   margin-top: 18px; /* Add space for the remove button above */
@@ -500,11 +733,11 @@ function crispName(name, max = 16) {
 
 .receipt-remove-btn {
   position: absolute;
-  top: -16px;   /* Move above the image */
+  top: -16px; /* Move above the image */
   right: 2px;
   z-index: 2;
   background: #fff;
-  box-shadow: 0 2px 8px rgba(60,64,67,.10);
+  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.1);
 }
 
 .receipt-upload-btn {
@@ -515,14 +748,14 @@ function crispName(name, max = 16) {
   font-size: 1.18rem;
   font-weight: 700;
   border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(60,64,67,.08);
+  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.08);
   letter-spacing: 0.01em;
   padding: 14px 0;
   transition: box-shadow 0.18s, transform 0.18s;
 }
 .receipt-upload-btn:hover,
 .receipt-upload-btn:focus {
-  box-shadow: 0 6px 24px rgba(60,64,67,.12);
+  box-shadow: 0 6px 24px rgba(60, 64, 67, 0.12);
   transform: scale(1.01);
 }
 .receipt-camera-feed {
@@ -549,41 +782,13 @@ function crispName(name, max = 16) {
   max-height: 320px;
 }
 
-.receipt-camera-actions {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 18px;
-  margin-top: 18px;
-  width: 100%;
-}
-
-.receipt-camera-actions-outside {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;           /* Less gap for minimal look */
-  margin: 8px 0 0 0;   /* Less margin above */
-  width: 100%;
-  min-height: 44px;    /* Slightly smaller for minimalism */
-}
-
-.receipt-camera-btn {
-  min-width: 80px;     /* Smaller button width */
-  padding: 0 10px;     /* Less horizontal padding */
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  border-radius: 12px;
-}
-
 .receipt-camera-close-btn {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 10;
   background: #fff;
-  box-shadow: 0 2px 8px rgba(60,64,67,.10);
+  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.1);
   width: 40px;
   height: 40px;
   min-width: 40px;
@@ -598,39 +803,8 @@ function crispName(name, max = 16) {
 .receipt-camera-close-btn:hover,
 .receipt-camera-close-btn:focus {
   background: #f1f5f9;
-  box-shadow: 0 4px 16px rgba(60,64,67,.16);
+  box-shadow: 0 4px 16px rgba(60, 64, 67, 0.16);
   opacity: 1;
-}
-
-.receipt-captured-thumbnails {
-  width: 100%;
-  margin: 8px 0 0 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.receipt-captured-counter {
-  font-size: 0.98rem;
-  color: #10b981;
-  font-weight: 600;
-  margin-bottom: 4px;
-  margin-left: 2px;
-}
-
-.receipt-captured-thumbs {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.receipt-captured-thumb {
-  width: 38px;
-  height: 38px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1.5px solid #22c55e;
-  background: #fff;
 }
 
 .receipt-preview-thumb,
@@ -667,6 +841,10 @@ function crispName(name, max = 16) {
 }
 
 @media (max-width: 600px) {
+  .receipt-upload-container {
+    padding: 24px 16px 20px 16px;
+  }
+
   .receipt-preview-thumb,
   .receipt-preview-item q-img,
   .receipt-preview-item img {
@@ -695,5 +873,12 @@ function crispName(name, max = 16) {
     min-width: 0;
     min-height: 0;
   }
+}
+
+/* Add to the style section */
+.error-dialog-card {
+  width: 100%;
+  max-width: 400px;
+  border-radius: 16px;
 }
 </style>

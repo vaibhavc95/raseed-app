@@ -98,7 +98,7 @@
         </div>
         
         <!-- Floating Action Button -->
-        <div class="fab-container">
+        <!-- <div class="fab-container">
           <q-btn
             fab
             icon="add"
@@ -107,7 +107,7 @@
             class="main-fab"
             @click="navigateTo('upload')"
           />
-        </div>
+        </div> -->
       </div>
     </q-footer>
   </q-layout>
