@@ -9,6 +9,7 @@ const routes = [
       // Protected routes
       { path: '/create-raseed', component: () => import('pages/CreateRaseedPage.vue'), meta: { requiresAuth: true }},
       { path: '/assistant', component: () => import('pages/AssistantPage.vue'), meta: { requiresAuth: true }},
+      { path: '/insights', component: () => import('pages/InsightsPage.vue'), meta: { requiresAuth: true }},
       // { path: '/assistant', component: () => import('pages/AssistantPage.vue')},
       
       // Remove these unused routes

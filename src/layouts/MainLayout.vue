@@ -146,7 +146,7 @@ const currentRoute = computed(() => {
 function navigateTo(tabName) {
   switch (tabName) {
     case 'insights':
-      router.push('/create-raseed') // You can change this to a dedicated insights page
+      router.push('/insights')
       break
     case 'upload':
       router.push('/create-raseed')
